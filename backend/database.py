@@ -1,4 +1,4 @@
-from models import Movie, Room, Seat
+from models import Movie, Room, Seat, Session
 
 import motor.motor_asyncio
 
@@ -71,4 +71,17 @@ async def fetch_all_seats(room):
 
 async def fetch_one_seat(room, row, col):
     document = await collection.find_one({"id":id, "row":row, "col":col})
+    return document
+
+# Sessions functions
+
+async def fetch_all_sessions(movie):
+    sessions = []
+    cursor = collection.find({"movie":movie})
+    async for document in cursor:
+        sessions.append(Session(**document))
+    return sessions
+
+async def fetch_one_session(movie,time):
+    document = await collection.find_one({"movie":movie, "time":time})
     return document

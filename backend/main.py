@@ -1,7 +1,7 @@
-from urllib import response
+from typing import Tuple
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from models import Movie, Room, Seat
+from models import Movie, Room, Seat, Session
 
 app = FastAPI()
 
@@ -20,6 +20,9 @@ from database import (
 
     fetch_all_seats,
     fetch_one_seat,
+
+    fetch_all_sessions,
+    fetch_one_session,
 )
 
 origins = ['http://localhost:3000']
@@ -87,7 +90,7 @@ async def get_room_by_id(id):
 
 @app.post('/api/room', response_model=Room)
 async def post_room(room:Room):
-    reponse = await create_room(room.dict())
+    response = await create_room(room.dict())
     if response:
         return response
     raise HTTPException(400, "Something went wrong")
@@ -121,3 +124,19 @@ async def get_seat(room, row, col):
     if response:
         return response
     raise HTTPException(404, "This seat doesn't exist")
+
+# Session api views
+
+@app.get('/api/session/{movie}', response_model=Session)
+async def get_sessions_by_movie(movie):
+    response = fetch_all_sessions(movie)
+    if response:
+        return response
+    raise HTTPException(404, f"This Movie doesn't exist")
+
+@app.get('/api/session/{movie}', response_model=Session)
+async def get_session(movie, time:Tuple[int,int]):
+    response = await fetch_one_session(movie,time)
+    if response:
+        return response
+    raise HTTPException(404, "This movie session deosn't exist")

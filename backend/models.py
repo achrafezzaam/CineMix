@@ -1,3 +1,4 @@
+from typing import Tuple
 from pydantic import BaseModel
 
 class Movie(BaseModel):
@@ -12,3 +13,7 @@ class Seat(BaseModel):
     room    : str
     row     : str
     col     : str
+
+class Session(BaseModel):
+    movie   : str
+    time    : Tuple[int, int]
