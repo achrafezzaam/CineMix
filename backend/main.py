@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
 import models
-from schemas import Movie, Room, Seat, Session
+from schemas import Movie, Room, Seat, Session, Ticket
 from database import SessionLocal, engine
+from datetime import time
 
 app = FastAPI()
 
@@ -125,15 +126,39 @@ async def get_seat(room_id:int, row:int, col:int, db: Session = Depends(get_db))
 
 # # Session api views
 
-@app.get('/api/session/{movie}', response_model=Session)
-async def get_sessions_by_movie(movie, db: Session = Depends(get_db)):
-    movie = db.query(models.Movie).filter_by(title=movie).first()
-    session = db.query(models.Session).filter_by(movie_id=movie.id).first()
-    return session
+@app.get('/api/sessions', response_model=List[Session])
+async def get_sessions(db: Session = Depends(get_db)):
+    movie_sessions = db.query(models.Session).all()
+    return movie_sessions
 
+@app.get('/api/sessions/{movie}', response_model=List[Session])
+async def get_sessions_by_movie(movie:str, db: Session = Depends(get_db)):
+    movie = db.query(models.Movie).filter_by(title=movie).first()
+    movie_sessions = db.query(models.Session).filter_by(movie_id=movie.id).all()
+    return movie_sessions
+
+@app.post('/api/session/')
+async def post_session(movie_id:int, time:time, db: Session = Depends(get_db)):
+    movie_session = models.Session(movie_id=movie_id,time=time)
+    db.add(movie_session)
+    db.commit()
+    return "Session created successfully"
 # @app.get('/api/session/{movie}', response_model=Session)
 # async def get_session(movie, time:Tuple[int,int]):
 #     response = await fetch_one_session(movie,time)
 #     if response:
 #         return response
 #     raise HTTPException(404, "This movie session deosn't exist")
+
+# # Ticket api views
+@app.get('/api/ticket/{id}', response_model=Ticket)
+async def get_ticket_by_id(id:int, db: Session = Depends(get_db)):
+    ticket = db.query(models.Ticket).get(id)
+    return ticket
+
+@app.post('/api/ticket/')
+async def post_ticket(movie_id:int, seat_id:int, session_id:int, db: Session = Depends(get_db)):
+    ticket = models.Ticket(movie_id=movie_id,seat_id=seat_id, session_id=session_id)
+    db.add(ticket)
+    db.commit()
+    return "The ticket was created successfully"

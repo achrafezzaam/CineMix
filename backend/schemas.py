@@ -1,4 +1,5 @@
-from typing import Tuple, Optional
+from datetime import time
+from typing import Optional
 from pydantic import BaseModel
 
 class Movie(BaseModel):
@@ -30,7 +31,17 @@ class Seat(BaseModel):
 class Session(BaseModel):
     id          : Optional[int]
     movie_id    : int
-    time        : Tuple[int, int]
+    time        : time
+
+    class Config:
+        orm_mode = True
+
+class Ticket(BaseModel):
+    id          : Optional[int]
+    movie_id    : int
+    seat_id     : int
+    session_id  : int
+    printed_at  : time
 
     class Config:
         orm_mode = True
