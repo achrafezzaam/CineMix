@@ -1,29 +1,24 @@
-from typing import Tuple
-from fastapi import FastAPI, HTTPException
+from typing import Tuple, List
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from models import Movie, Room, Seat, Session
+from sqlalchemy.orm import Session
+from starlette.responses import RedirectResponse
+
+import models
+from schemas import Movie, Room, Seat, Session
+from database import SessionLocal, engine
 
 app = FastAPI()
 
-from database import (
-    fetch_all_movies,
-    fetch_one_movie,
-    create_movie,
-    update_movie,
-    remove_movie,
+models.Base.metadata.create_all(bind=engine)
 
-    fetch_all_rooms,
-    fetch_one_room,
-    create_room,
-    update_room,
-    remove_room,
-
-    fetch_all_seats,
-    fetch_one_seat,
-
-    fetch_all_sessions,
-    fetch_one_session,
-)
+# Dependency
+def get_db():
+    try:
+        db = SessionLocal()
+        yield db
+    finally:
+        db.close()
 
 origins = ['http://localhost:3000']
 
@@ -37,106 +32,108 @@ app.add_middleware(
 
 @app.get('/')
 async def index():
-    return 'Welcome to the root page'
+    return RedirectResponse(url='/docs/')
 
 # Movie api views
 
-@app.get('/api/movie')
-async def get_movies():
-    response = await fetch_all_movies()
+@app.get('/api/movie', response_model=List[Movie])
+async def get_movies(db: Session = Depends(get_db)):
+    response = db.query(models.Movie).all()
     return response
 
 @app.get('/api/movie/{title}', response_model=Movie)
-async def get_movie_by_title(title):
-    response = await fetch_one_movie(title)
-    if response:
-        return response
-    raise HTTPException(404, f"Movie with the title {title} was not found")
+async def get_movie_by_title(title:str, db: Session = Depends(get_db)):
+    movie = db.query(models.Movie).filter_by(title=title).first()
+    return movie
 
-@app.post('/api/movie', response_model=Movie)
-async def post_movie(movie:Movie):
-    response = await create_movie(movie.dict())
-    if response:
-        return response
-    raise HTTPException(400, "Something went wrong")
+@app.post('/api/movie')
+async def post_movie(title:str, desc:str, db: Session = Depends(get_db)):
+    movie = models.Movie(title=title,desc=desc)
+    db.add(movie)
+    db.commit()
+    return "Movie created successfully"
 
-@app.put('/api/movie/{title}', response_model=Movie)
-async def put_movie(title: str, desc: str):
-    response = await update_movie(title, desc)
-    if response:
-        return response
-    raise HTTPException(404, f"The movie with title {title} wasn't found")
+@app.put('/api/movie/{title}')
+async def put_movie(id: int, title: str, desc: str, db: Session = Depends(get_db)):
+    movie = db.query(models.Movie).get(id)
+    movie.title = title
+    movie.desc = desc
+    db.add(movie)
+    db.commit()
+    return "The Movie's data was updated successfully"
 
-@app.delete('/api/movie/{title}')
-async def delete_movie(title):
-    response = remove_movie(title)
-    if response:
-        return "Movie deleted successfully"
-    raise HTTPException(400, "Something went wrong")
+@app.delete('/api/movie/{id}')
+async def delete_movie(id, db: Session = Depends(get_db)):
+    movie = db.query(models.Movie).get(id)
+    row_deleted = db.delete(movie)
+    db.commit()
+    return "Movie deleted successfully"
 
-# Room api views
+# # Room api views
 
-@app.get('/api/room')
-async def get_rooms():
-    response = await fetch_all_rooms()
+@app.get('/api/room', response_model=List[Room])
+async def get_rooms(db: Session = Depends(get_db)):
+    response = db.query(models.Room).all()
     return response
 
 @app.get('/api/room/{id}', response_model=Room)
-async def get_room_by_id(id):
-    response = await fetch_one_room(id)
-    if response:
-        return response
-    raise HTTPException(404, f"The room with the id {id} doesn't exist")
+async def get_room_by_id(id, db: Session = Depends(get_db)):
+    room = db.query(models.Room).get(id)
+    return room
 
-@app.post('/api/room', response_model=Room)
-async def post_room(room:Room):
-    response = await create_room(room.dict())
-    if response:
-        return response
-    raise HTTPException(400, "Something went wrong")
+@app.post('/api/room')
+async def post_room(name:str, rows:int, cols:int, db: Session = Depends(get_db)):
+    room = models.Room(name=name,rows=rows,cols=cols)
+    db.add(room)
+    db.commit()
+    for row in range(rows):
+        for col in range(cols):
+            seat = models.Seat(room_id=room.id,col=(col+1),row=(row+1))
+            db.add(seat)
+            db.commit()
+    return f"The room {name} was created successfully"
 
 @app.put('/api/room/{id}', response_model=Room)
-async def put_room(id: str, movie: str):
-    response = await update_room(id,movie)
-    if response:
-        return response
-    raise HTTPException(404, f"The room with the id {id} deosn't exist")
+async def put_room(id:int, name:str, cols:int, rows:int, db: Session = Depends(get_db)):
+    room = db.query(models.Room).get(id)
+    room.name = name
+    room.cols = cols
+    room.rows = rows
+    db.add(room)
+    db.commit()
+    return "The Room's data was updated successfully"
 
 @app.delete('/api/room/{id}')
-async def delete_room(id):
-    response = await remove_room(id)
-    if response:
-        return "The room was deleted successfully"
-    raise HTTPException(400, "Something went wrong")
+async def delete_room(id, db: Session = Depends(get_db)):
+    room = db.query(models.Room).get(id)
+    row_deleted = db.delete(room)
+    seats_deleted = db.query(models.Seat).filter_by(room_id=id).delete()
+    db.commit()
+    return "Room deleted successfully"
 
-# Seat api views
+# # Seat api views
+
+@app.get('/api/seats/{room}', response_model=List[Seat])
+async def get_seats_by_room(room_id, db: Session = Depends(get_db)):
+    seats_list = db.query(models.Seat).filter_by(room_id=room_id).all()
+    return seats_list
 
 @app.get('/api/seat/{room}', response_model=Seat)
-async def get_seats_by_room(room):
-    response = await fetch_all_seats(room)
-    if response:
-        return response
-    raise HTTPException(404, f"This room deosn't exist")
+async def get_seat(room_id:int, row:int, col:int, db: Session = Depends(get_db)):
+    seat = db.query(models.Seat).filter_by(room_id=room_id,row=row,col=col).first()
+    return seat
 
-@app.get('/api/seat/{room}{row}{col}', response_model=Seat)
-async def get_seat(room, row, col):
-    response = await fetch_one_seat(room, row, col)
-    if response:
-        return response
-    raise HTTPException(404, "This seat doesn't exist")
-
-# Session api views
+# # Session api views
 
 @app.get('/api/session/{movie}', response_model=Session)
-async def get_sessions_by_movie(movie):
-    response = fetch_all_sessions(movie)
-    if response:
-        return response
-    raise HTTPException(404, f"This Movie doesn't exist")
+async def get_sessions_by_movie(movie, db: Session = Depends(get_db)):
+    movie = db.query(models.Movie).filter_by(title=movie).first()
+    session = db.query(models.Session).filter_by(movie_id=movie.id).first()
+    return session
 
-@app.get('/api/session/{movie}', response_model=Session)
-async def get_session(movie, time:Tuple[int,int]):
-    response = await fetch_one_session(movie,time)
-    if response:
-        return response
-    raise HTTPException(404, "This movie session deosn't exist")
+# @app.get('/api/session/{movie}', response_model=Session)
+# async def get_session(movie, time:Tuple[int,int]):
+#     response = await fetch_one_session(movie,time)
+#     if response:
+#         return response
+#     raise HTTPException(404, "This movie session deosn't exist")
